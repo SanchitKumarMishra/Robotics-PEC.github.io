@@ -175,11 +175,58 @@ BEGIN
 END;
 $$;
 
--- 5. Enable Row Level Security (RLS)
+-- 5. Atomic RPC: Cancel borrow request (by member for own pending request or by admin)
+CREATE OR REPLACE FUNCTION public.cancel_inventory_request(
+    p_request_id UUID
+) RETURNS JSONB
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+    v_profile_id UUID;
+    v_status TEXT;
+BEGIN
+    SELECT profile_id, status
+    INTO v_profile_id, v_status
+    FROM public.inventory_requests
+    WHERE id = p_request_id
+    FOR UPDATE;
+
+    IF NOT FOUND THEN
+        RAISE EXCEPTION 'Request not found';
+    END IF;
+
+    -- Verify caller owns the request or has admin/panel role
+    IF NOT (
+        v_profile_id IN (SELECT p.id FROM public.profiles p WHERE p."userId" = auth.uid())
+        OR public.is_admin_or_panel()
+    ) THEN
+        RAISE EXCEPTION 'Unauthorized: only request owner or admin/panel can cancel this request';
+    END IF;
+
+    IF v_status <> 'pending' THEN
+        RAISE EXCEPTION 'Only pending requests can be cancelled. Current status: %', v_status;
+    END IF;
+
+    UPDATE public.inventory_requests
+    SET status = 'cancelled',
+        updated_at = now()
+    WHERE id = p_request_id;
+
+    RETURN jsonb_build_object(
+        'success', true,
+        'request_id', p_request_id,
+        'status', 'cancelled'
+    );
+END;
+$$;
+
+-- 6. Enable Row Level Security (RLS)
 ALTER TABLE public.inventory_items ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.inventory_requests ENABLE ROW LEVEL SECURITY;
 
--- 5.1 RLS for inventory_items
+-- 6.1 RLS for inventory_items
 CREATE POLICY "Allow authenticated users to view inventory items"
     ON public.inventory_items
     FOR SELECT
@@ -205,7 +252,7 @@ CREATE POLICY "Allow admin or panel to delete inventory items"
     TO authenticated
     USING (public.is_admin_or_panel());
 
--- 5.2 RLS for inventory_requests
+-- 6.2 RLS for inventory_requests
 CREATE POLICY "Allow users to view own requests or admin/panel to view all"
     ON public.inventory_requests
     FOR SELECT
@@ -233,3 +280,17 @@ CREATE POLICY "Allow admin or panel to update requests"
     TO authenticated
     USING (public.is_admin_or_panel())
     WITH CHECK (public.is_admin_or_panel());
+
+CREATE POLICY "Allow users to cancel own pending requests"
+    ON public.inventory_requests
+    FOR UPDATE
+    TO authenticated
+    USING (
+        profile_id IN (
+            SELECT p.id FROM public.profiles p WHERE p."userId" = auth.uid()
+        )
+        AND status = 'pending'
+    )
+    WITH CHECK (
+        status = 'cancelled'
+    );

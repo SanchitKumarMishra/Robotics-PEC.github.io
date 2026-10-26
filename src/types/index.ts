@@ -53,7 +53,7 @@ export interface PublicUrlType {
     url: string;
 }
 
-interface FormTeamType {
+export interface FormTeamType {
     id: string;
     firstName: string;
     lastName: string;
@@ -310,3 +310,5 @@ export enum DocumentType {
     LETTER = "Letter",
     AuditoriumPermission = "AuditoriumPermission",
 }
+
+export * from "./inventory";

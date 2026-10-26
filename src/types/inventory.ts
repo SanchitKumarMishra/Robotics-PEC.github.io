@@ -1,12 +1,29 @@
-export type ItemCondition = "Brand New" | "Good" | "Fair" | "Damaged/Maintenance";
+export const INVENTORY_CATEGORIES = [
+    "Controllers",
+    "Motors & Actuators",
+    "Sensors",
+    "Power & Batteries",
+    "Wires & Cables",
+    "Equipment & Tools",
+    "Mechanical & Hardware",
+    "Electronic Components",
+    "General",
+] as const;
 
-export type RequestStatus = "pending" | "approved" | "rejected" | "returned" | "cancelled";
+export type ItemCategory =
+    (typeof INVENTORY_CATEGORIES)[number] | (string & {});
+
+export type ItemCondition =
+    "Brand New" | "Good" | "Fair" | "Damaged/Maintenance";
+
+export type RequestStatus =
+    "pending" | "approved" | "rejected" | "returned" | "cancelled";
 
 export interface InventoryItem {
     id: string;
     name: string;
     description: string | null;
-    category: string;
+    category: ItemCategory;
     total_quantity: number;
     available_quantity: number;
     condition: ItemCondition;
@@ -19,7 +36,16 @@ export interface InventoryItem {
     updated_at: string;
 }
 
-export type InventoryItemInput = Omit<InventoryItem, "id" | "created_at" | "updated_at">;
+export type InventoryItemInput = Omit<
+    InventoryItem,
+    "id" | "created_at" | "updated_at"
+>;
+
+export interface FetchInventoryOptions {
+    category?: string;
+    search?: string;
+    inStockOnly?: boolean;
+}
 
 export interface InventoryRequest {
     id: string;
@@ -56,4 +82,12 @@ export interface BorrowRequestInput {
     expected_return_date: string;
     liability_consent_agreed: boolean;
     consent_signature_text: string;
+}
+
+export interface InventoryRpcResponse {
+    success: boolean;
+    request_id: string;
+    item_id?: string;
+    remaining_available?: number;
+    status?: string;
 }
